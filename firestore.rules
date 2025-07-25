@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sessions/{sessionId} {
+      // 只允許已登入使用者創建 session 文件
+      allow create: if request.auth != null;
+      // 桌機端尚未登入，允許任何人讀取指定 session 文件
+      allow read: if true;
+      // 僅允許文件擁有者（uid 欄位）刪除 session 文件
+      allow delete: if request.auth != null && request.auth.uid == resource.data.uid;
+      // 禁止更新文件，避免覆寫憑證
+      allow update: if false;
+    }
+  }
+}
