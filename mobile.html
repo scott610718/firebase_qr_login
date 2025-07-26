@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手機 Google 登入</title>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <!-- Google Identity Services (用於取得 Google ID token) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    button { font-size: 1rem; padding: 0.5rem 1rem; }
+    #msg { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>使用 Google 登入</h1>
+  <p>登入後我們將通知桌機端。</p>
+  <!-- Google 登入按鈕將渲染在此 DIV 中 -->
+  <div id="clientInputSection">
+    <label for="clientIdInput">Google OAuth Client ID：</label>
+    <input type="text" id="clientIdInput" placeholder="請輸入 client ID" style="width:100%;max-width:350px;" />
+    <button id="initBtn">確認並產生登入按鈕</button>
+  </div>
+  <!-- 登入按鈕將顯示在此 DIV -->
+  <div id="loginBtn" style="margin-top:1rem;"></div>
+  <div id="msg"></div>
+  <script>
+    // TODO: 將此區塊替換成你自己的 Firebase 專案設定
+    const firebaseConfig = {
+       apiKey: "AIzaSyALGm6E8vYmRXl2dx9BR87_WHWSC9nZa8s",
+       authDomain: "qrlogin-eef46.firebaseapp.com",
+       projectId: "qrlogin-eef46",
+       storageBucket: "qrlogin-eef46.firebasestorage.app",
+       messagingSenderId: "403067215772",
+       appId: "1:403067215772:web:00ac89e342fb4a65a1f259",
+       measurementId: "G-YFXPYNY9GP"    };
+
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // 取得 sessionId
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session');
+    if (!sessionId) {
+      document.getElementById('msg').textContent = '缺少 session 參數';
+    }
+
+    // Google Identity Services 初始化
+    window.handleCredentialResponse = async function(response) {
+      if (!sessionId) return;
+      const idToken = response.credential; // 這是 Google ID token
+      try {
+        // 用 Google ID token 取得 Firebase 憑證並登入
+        const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+        const result = await auth.signInWithCredential(credential);
+        const user = result.user;
+        // 將 idToken 及使用者資訊寫入 Firestore
+        await db.collection('sessions').doc(sessionId).set({
+          idToken: idToken,
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        document.getElementById('msg').textContent = '登入成功，請回到桌機端。';
+      } catch (err) {
+        console.error(err);
+        document.getElementById('msg').textContent = '登入失敗：' + err.message;
+      }
+    };
+
+    // 初始化 GIS 按鈕，根據使用者輸入的 client ID
+    window.onload = function() {
+      const initBtn = document.getElementById('initBtn');
+      initBtn.addEventListener('click', () => {
+        const clientIdInput = document.getElementById('clientIdInput').value.trim();
+        if (!clientIdInput) {
+          document.getElementById('msg').textContent = '請輸入有效的 client ID';
+          return;
+        }
+        // 隱藏輸入區塊
+        document.getElementById('clientInputSection').style.display = 'none';
+        document.getElementById('msg').textContent = '';
+        // 初始化 Google 身份服務
+        google.accounts.id.initialize({
+          client_id: clientIdInput,
+          callback: handleCredentialResponse,
+          ux_mode: 'popup'
+        });
+        // 渲染 Google 登入按鈕
+        google.accounts.id.renderButton(document.getElementById('loginBtn'), {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large'
+        });
+      });
+    };
+  </script>
+</body>
+</html>
